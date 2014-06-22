@@ -1,0 +1,169 @@
+#!/usr/bin/env python
+
+# Python standard library modules
+import ConfigParser
+import optparse
+import os
+import subprocess
+import sys
+
+# 3rd party modules
+import json
+
+aws_account_id = 'xxxxxxxxxxxx'
+
+parser = optparse.OptionParser('usage: %prog -u AWS_USERNAME -m AWS_MFA_CODE')
+parser.add_option(
+    '-u',
+    '--username',
+    dest='username',
+    type='string',
+    help='specify your AWS username',
+)
+parser.add_option(
+    '-m',
+    '--mfa',
+    dest='mfa',
+    type='string',
+    help='specify your AWS MFA code',
+)
+options, args = parser.parse_args()
+if options.username is None or options.mfa is None:
+    parser.print_help()
+    sys.exit(-1)
+
+aws_username = options.username
+aws_mfacode = options.mfa
+
+# Do some validation on the given MFA code
+if len(aws_mfacode) != 6:
+    sys.stderr.write('Error: MFA code must be 6 digits long\n')
+    sys.exit(1)
+
+# Get the current users home directory and check the ~/.aws/config file exists
+home = os.path.expanduser('~')
+if not os.path.isfile(os.path.join(home, '.aws', 'config')):
+    sys.stderr.write('Error: File ~/.aws/config does not exist\n')
+    sys.exit(1)
+
+# Parse the AWS config file
+sys.stdout.write('Parsing the ~/.aws/config file...')
+sys.stdout.flush()
+
+config = ConfigParser.ConfigParser()
+config.read(os.path.join(home, '.aws', 'config'))
+
+# Clear the "default" section, as we will be creating this from scratch
+config.remove_section('default')
+
+# Copy the keys from the 'my-keys' section to the 'default' section.
+# This is required for the 'get-session-token' call to work.
+# Once we have the temporary token, the 'default' section will
+# be overwritten with the new token details.
+config._defaults = {
+    'aws_access_key_id': config.get('my-keys', 'aws_access_key_id'),
+    'aws_secret_access_key': config.get('my-keys', 'aws_secret_access_key'),
+    'region': config.get('my-keys', 'region'),
+}
+
+with open(os.path.join(home, '.aws', 'config'), 'w') as configfile:
+    config.write(configfile)
+
+# !!! HACK ALERT !!!
+# The crappy ConfigParser module forces the "default" config section heading
+# to be uppercase (e.g. "[DEFAULT"]), which the AWS CLI tool will not
+# recognise. I haven't been able to find a way to force the "default" heading
+# to be lowercase (without resorting to 3rd party modules), hence the following
+# dirtyness.
+config_input = open(os.path.join(home, '.aws', 'config'), 'r').read()
+config_input = config_input.replace('[DEFAULT]', '[default]')
+open(os.path.join(home, '.aws', 'config'), 'w').write(config_input)
+
+sys.stdout.write('                     [\033[92mOK\033[0m]\n')
+sys.stdout.write('Getting session token from AWS...')
+sys.stdout.flush()
+
+# Spawn the awscli to get the session data
+stdout, stderr = subprocess.Popen(
+    [
+        '/usr/local/bin/aws',
+        'sts',
+        'get-session-token',
+        '--serial-number',
+        'arn:aws:iam::%s:mfa/%s' % (aws_account_id, aws_username),
+        '--token-code',
+        str(aws_mfacode),
+    ],
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+).communicate()
+
+# Attempt to parse the AWS output as JSON
+try:
+    session_data = json.loads(stdout)
+except ValueError:
+    # If the AWS output cannot be parsed as JSON, then it is assumed that an
+    # error occured. In this case output whatever the AWS CLI printed to stderr
+    sys.stdout.write('                     [\033[91mERROR\033[0m]\n')
+    sys.stderr.write('Error: %s\n' % stderr.strip())
+    sys.exit(1)
+
+sys.stdout.write('                     [\033[92mOK\033[0m]\n')
+sys.stdout.write('Updating the ~/.aws/config file...')
+sys.stdout.flush()
+
+# Put the new temporary token info into the 'default' section of the config
+# file
+config._defaults = {
+    'aws_access_key_id': session_data['Credentials']['AccessKeyId'],
+    'aws_secret_access_key': session_data['Credentials']['SecretAccessKey'],
+    'aws_security_token': session_data['Credentials']['SessionToken'],
+    'region': config.get('my-keys', 'region'),
+}
+
+# Save the config file
+with open(os.path.join(home, '.aws', 'config'), 'w') as configfile:
+    config.write(configfile)
+
+# !!! HACK ALERT !!!
+# The crappy ConfigParser module forces the "default" config section heading
+# to be uppercase (e.g. "[DEFAULT"]), which the AWS CLI tool will not
+# recognise. I haven't been able to find a way to force the "default" heading
+# to be lowercase (without resorting to 3rd party modules), hence the following
+# dirtyness.
+config_input = open('%s/.aws/config' % home, 'r').read()
+config_input = config_input.replace('[DEFAULT]', '[default]')
+open(os.path.join(home, '.aws', 'config'), 'w').write(config_input)
+
+sys.stdout.write('                    [\033[92mOK\033[0m]\n')
+sys.stdout.flush()
+
+# Create/update the boto config
+sys.stdout.write('Creating/updating the ~/.boto config file...')
+sys.stdout.flush()
+boto_config = ConfigParser.ConfigParser()
+boto_config.read(os.path.join(home, '.boto'))
+boto_config.remove_section('Credentials')
+boto_config.add_section('Credentials')
+boto_config.set(
+    'Credentials',
+    'aws_access_key_id',
+    session_data['Credentials']['AccessKeyId'],
+)
+boto_config.set(
+    'Credentials',
+    'aws_secret_access_key',
+    session_data['Credentials']['SecretAccessKey'],
+)
+boto_config.set(
+    'Credentials',
+    'aws_security_token',
+    session_data['Credentials']['SessionToken'],
+)
+
+# Save the boto config file
+with open(os.path.join(home, '.boto'), 'w') as configfile:
+    boto_config.write(configfile)
+
+sys.stdout.write('          [\033[92mOK\033[0m]\n')
+sys.stdout.flush()
