@@ -10,7 +10,7 @@ possible. Otherwise you could be the next
 
 If the access keys for your IAM user account require two factor authentication
 you'd need to use the STS service (run the `awscli` tool with the
-` sts get-session-token` option ) to get a temporary set of access keys. You
+` sts get-session-token` option) to get a temporary set of access keys. You
 would then need to update your `~/.aws/config` file manually with the temporary
 access keys. You would also need to update your `~/.boto` file, if you use the
 `boto` module for python.
