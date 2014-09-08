@@ -66,3 +66,21 @@ Assuming there are no errors, a `default` section will have been created in the
 The `Credentials` section of your `~/.boto` file will be updated with the new
 session details. The `~/.boto` file will be created if it does not already
 exist.
+
+## Enabling in IAM
+
+You also need to edit your IAM policy so the 2FA is forced for your account.   
+Do this by adding a MultiFactor condition on the actions/resources you want to force 2FA on.   
+For example:   
+
+```
+     "Condition":{ "NumericLessThan":{"aws:MultiFactorAuthAge":"43200"},
+                   "Null": {"aws:MultiFactorAuthAge": "false"}
+                   
+      }
+
+```
+
+More info here: http://docs.aws.amazon.com/IAM/latest/UserGuide/MFAProtectedAPI.html
+
+
