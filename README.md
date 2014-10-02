@@ -45,6 +45,25 @@ update the `region` section to the region you want to connect to.
 The last step is to edit the script and edit the `aws_account_id` variable.
 You will need to set this to 12 digit account ID where your IAM user resides.
 
+## Enable 2FA in IAM
+
+You will need to edit your IAM policy to enable 2FA on selected actions and
+resources in your account. Do this by adding a `MultiFactorAuthAge` condition
+on the actions/resources you want to enforce 2FA on. For example:   
+```
+"Condition":{
+    "NumericLessThan": {
+        "aws:MultiFactorAuthAge":"43200"
+     },
+     "Null": {
+          "aws:MultiFactorAuthAge": "false"
+     }
+ }
+
+```
+
+More info on enabling 2FA in IAM can be found in the [AWS documentation](http://docs.aws.amazon.com/IAM/latest/UserGuide/MFAProtectedAPI.html)
+
 ## Generating a Session Token
 To generate a new session token, run the command:
 
@@ -66,21 +85,3 @@ Assuming there are no errors, a `default` section will have been created in the
 The `Credentials` section of your `~/.boto` file will be updated with the new
 session details. The `~/.boto` file will be created if it does not already
 exist.
-
-## Enabling in IAM
-
-You also need to edit your IAM policy so the 2FA is forced for your account.   
-Do this by adding a MultiFactor condition on the actions/resources you want to force 2FA on.   
-For example:   
-
-```
-     "Condition":{ "NumericLessThan":{"aws:MultiFactorAuthAge":"43200"},
-                   "Null": {"aws:MultiFactorAuthAge": "false"}
-                   
-      }
-
-```
-
-More info here: http://docs.aws.amazon.com/IAM/latest/UserGuide/MFAProtectedAPI.html
-
-
