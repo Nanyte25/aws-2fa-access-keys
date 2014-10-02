@@ -1,4 +1,4 @@
-# AWS 2FA Access Keys
+# 2FA on AWS Access Keys
 
 ## So What Is It?
 This is a python script (2.x) that generates temporary AWS authentication keys
