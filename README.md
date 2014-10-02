@@ -24,8 +24,8 @@ To get the script and install the dependencies (requires `pip` to be already be
 installed), run the following commands:
 
 ```
-git clone https://github.com/cdodd/aws-get-token.git
-cd aws-get-token
+git clone https://github.com/cdodd/aws-2fa-access-keys.git
+cd aws-2fa-access-keys
 sudo pip install -r requirements.txt
 ```
 
